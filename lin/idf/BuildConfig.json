@@ -1,0 +1,52 @@
+{
+    "IngredientName": "oa-lin",
+    "Description": "idf ABI Project Config File for IO PM Ingredient",
+    "OutputConfiguration": "idf/PackageGen.json",
+    "OutputRoot": "OWRBin",
+    "OutputDir": "OWRBuild",
+    "PackageRoot": "OWRPackage",
+    "PackageMetadataTemplate": "idf/PackageMetadataTemplate.json",
+    "BuildInfo":{
+        "Name":"",
+        "FullName":"",
+        "SDL": [
+            {
+                "ID": "",
+                "URL": "",
+                "Submitter": "lab_bldmstr"
+            }
+        ],
+	 "ServerURL":"https://onebkc.intel.com",
+        "Type":"onebkc"
+    },
+    //"Protex": {
+    //    "Server": "https://garprotex009.devtools.intel.com",
+    //    "ProjectID": "c_iotg_hspe_sws_csw_mtl_io_driver_18767"
+    //},
+    "Klocwork": {
+        "ServerURL": "https://klocwork-png7.devtools.intel.com",
+        "ServerPort": "8105",
+        "LicenseHost": "klocwork05p.elic.intel.com",
+        "LicensePort": "7500",
+        "Project": "ADLN-LIN-OFFICE_AUTOMATION",
+        "OutputConfiguration": "",
+        "OnErrorContinueAnalysis":true,
+        "OverWriteDuplicates": true
+    },
+    "SubComponents": [
+        {
+            "Name": "oa-lin",
+            "Description": "oa Script App",
+            "ProjectFile": "./build.sh",
+            "ProjectType": "Script",
+            "WorkingDirectory": "idf",
+            "AdditionalFlags": "",
+            "AdditionalEnvVars": "",
+            "Klocwork":{
+                "Project":"ADLN-LIN-OFFICE_AUTOMATION",
+                "Type":"cpp"
+            }
+        }
+    ],
+    "SchemaVersion": "1.0"
+}
