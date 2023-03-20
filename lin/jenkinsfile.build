@@ -1,0 +1,139 @@
+#!groovy
+@Library('abi@2.4.0') _
+
+import owm.common.BuildInfo
+Map buildinfo = BuildInfo.instance.data
+
+pipeline {
+	agent {
+        node {
+            label 'ESC-DOCKER1-SLES12'
+        }
+    }
+	
+	environment {
+        DATETIME = new Date().format("yyyyMMdd-HHmm");
+        BDBA_SCAN_DIR = "BDBA_SCAN";
+        YEAR = new Date().format("yyyy")
+        WW = new Date().format("ww")
+        BDSERVER='https://amrprotex008.devtools.intel.com'
+        WORKSPACE_LIN="/build/cje/workspace/${JOB_BASE_NAME}"
+        BuildVersion = "1.0.000"
+        ABI_CONTAINER = "TRUE"
+        DOCKER = "abitest1:12"
+        TMPDIR = "/OWR/Tools/tmp"
+        JOB_TYPE = "prod"
+        HOST_LTOKEN = "/nfs/png/home/lab_bldmstr/.klocwork/ltoken"
+        NFS_KW_INSTALLER = "/nfs/png/disks/ecg_es_disk2"
+        STAGING_DIR = "${WORKSPACE}/abi/upload"
+    }
+	
+	options {
+        timestamps()
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '90', artifactDaysToKeepStr: '30'))
+        skipDefaultCheckout()
+    }
+    
+    parameters {
+        booleanParam(name: 'CLEANWS', defaultValue: true, description: 'Clean workspace')
+        booleanParam(name: 'EMAIL', defaultValue: true, description: 'Email notification upon job completion')
+        booleanParam(name: 'PUBLISH', defaultValue: true, description: 'Artifacts deployment')
+         string(name: 'BRANCH_IDENTIFIER', defaultValue: 'refs/heads/main', description: 'Git Branch, Tag, or CommitID identifier')
+    }
+	
+	stages {
+		stage ('CLEAN') {
+            when {
+                expression { params.CLEAN == true }
+            }
+            steps {
+                deleteDir()
+            }
+        }
+		
+		stage ('SCM') {
+			agent {
+                docker {
+                    image "${DOCKER}"
+                    args '--entrypoint= -e PATH=/home/lab_bldmstr/bin:$PATH -v /nfs/png/home/lab_bldmstr/docker:/home/lab_bldmstr/.ssh -v /nfs/png/home/lab_bldmstr/bin:/home/lab_bldmstr/bin -v /nfs/png/home/lab_bldmstr/.gitconfig:/home/lab_bldmstr/.gitconfig -v /nfs/png/home/lab_bldmstr/.git-credentials:/home/lab_bldmstr/.git-credentials -v /nfs/png/disks/ecg_es_disk2:/build/tools'
+                    reuseNode true
+                }
+            }
+			options {
+                retry(5)
+            }
+			steps {
+				parallel(
+                    "Office_AutomationI": {
+                        checkout([$class: 'GitSCM',
+                        userRemoteConfigs: [[credentialsId: 'GitHub-Token', url: 'https://github.com/intel-innersource/applications.iot.office-automation.dpcpp.git']],
+                        branches: [[name: "${params.BRANCH_IDENTIFIER}"]],
+                        extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir:'abi/Office_Automation'],
+                        [$class: 'CloneOption', timeout: 60],
+                        [$class: 'CleanBeforeCheckout'], 
+                        [$class: 'CheckoutOption', timeout: 60]]])
+                    },
+                    "esc-engservices": {
+                        checkout changelog: false, scm: ([$class: 'GitSCM',
+                        userRemoteConfigs: [[credentialsId: 'GitHub-Token', url: 'https://github.com/intel-innersource/libraries.devops.henosis.build.automation.services.git']],
+                        branches: [[name: 'refs/heads/master']],
+                        extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: 'abi/esc-engservices'],
+                        [$class: 'CloneOption', timeout: 60],
+                        [$class: 'CleanBeforeCheckout'], 
+                        [$class: 'CheckoutOption', timeout: 60]]])
+                    }
+                )
+			}
+		}
+		
+		stage('ABI') {
+            agent {
+                docker {
+                    image "${DOCKER}"
+                    args '--entrypoint= -v /nfs/png/disks/ecg_es_disk2:/build/tools'
+                    reuseNode true
+                }
+            }
+            options {
+                retry(10)
+            }
+            steps {
+                script {
+                    abi.shell("cp -r ${WORKSPACE}/abi/henosis/lin//IDF ${WORKSPACE}/abi")
+                    PrepareWS()
+                } 
+            }
+        }
+		//		getConfig()
+		//		BuildInfo.instance.data["Version"] = env.BuildVersion
+        //		abi_build subComponentName: "adlbsp", additionalFlags: "${bitbake_target}"
+		
+		stage('BUILD') {
+            agent {
+                docker {
+                    image "${DOCKER}"
+                    args '--entrypoint= -v /nfs/png/home/lab_bldmstr/docker:/home/lab_bldmstr/.ssh -v /nfs/png/home/lab_bldmstr/bin:/home/lab_bldmstr/bin -v /nfs/png/home/lab_bldmstr/.gitconfig:/home/lab_bldmstr/.gitconfig -v /nfs/png/home/lab_bldmstr/.git-credentials:/home/lab_bldmstr/.git-credentials -v /nfs/png/disks/ecg_es_disk2:/build/tools'
+                    reuseNode true
+                }
+            }
+            options {
+                retry(5)
+            }
+            steps {
+                dir('${WORKSPACE}/abi') {
+                    sh""" #!/bin/bash -xe
+                    source /opt/intel/oneapi/setvars.sh && \
+                    cd ${WORKSPACE}/Office_Automation/CopyPipeline && \
+                    make -j8'
+                    """
+                    sh"""
+                    mkdir ${WORKSPACE}/abi/upload && \
+                    cp ${WORKSPACE}/abi/Office_Automation/CopyPipeline/bin/CopyPipeline_bin ${WORKSPACE}/abi/upload'
+                    """
+                    
+                }
+            }
+        }
+	}
+}
